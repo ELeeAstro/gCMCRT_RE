@@ -17,7 +17,7 @@ k_lw = 1.0e-2
 nlay = 100
 
 p_top = 1e-6
-p_bot = 1.0
+p_bot = 100.0
 grav_const = 1000.0
 Rd_gas = 3.5568e7 
 
@@ -29,8 +29,8 @@ lw_g = 0.0
 
 &semi_grey_nml
 
-Nph_irr = 10000000
-Nph_int = 100
+Nph_irr = 1000000
+Nph_int = 1000
 Nit = 10
 last_int_fac = 5
 
@@ -45,14 +45,16 @@ k_lw = 1.0e-2
 nlay = 100
 
 p_top = 1e-6
-p_bot = 1.0
+p_bot = 10.0
 grav_const = 1000.0
 Rd_gas = 3.5568e7
 
-lw_a = 0.0
-lw_g = 0.0
+lw_a = 0.5
+lw_g = 0.5
 
 sw_a = 0.0
 sw_g = 0.0
+
+iscat = 3
 
 /

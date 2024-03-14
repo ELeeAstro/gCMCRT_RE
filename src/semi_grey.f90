@@ -54,10 +54,13 @@ contains
 
     ph%b = 1
 
+    ph%inc = 1
+
     call inc_stellar(ph)
 
     ph%flag = 0
     ph%nscat = 0
+    ph%iscat = iscat_d
 
     do while (ph%flag == 0)
 
@@ -69,18 +72,19 @@ contains
         call emit_iso_surf(ph)
         ph%b = 2
         ph%flag = 0
+        ph%inc = 0
         cycle
       end if
       if (ph%flag == 1) then
         exit
       end if
       if (curand_uniform(ph%iseed) < alb_d(ph%b,ph%zc)) then
-        ph%iscat = 1
         call scatt(ph)
         ph%nscat = ph%nscat + 1
       else
         call emit_iso(ph)
         ph%b = 2
+        ph%inc = 0
       end if
 
     end do
@@ -117,6 +121,9 @@ contains
 
     ph%flag = 0
     ph%nscat = 0
+    ph%iscat = iscat_d
+
+    ph%inc = 0
 
     do while (ph%flag == 0)
 
@@ -133,12 +140,10 @@ contains
         cycle
       end if
       if (curand_uniform(ph%iseed) < alb_d(ph%b,ph%zc)) then
-        ph%iscat = 1
         call scatt(ph)
         ph%nscat = ph%nscat + 1
       else
         call emit_iso(ph)
-        cycle
       end if
 
     end do
@@ -165,7 +170,7 @@ subroutine semi_grey()
   implicit none
 
   integer :: u_nml
-  integer :: Nph_irr, Nph_int, Nit, last_int_fac, nlay
+  integer :: Nph_irr, Nph_int, Nit, last_int_fac, nlay, iscat
   real(dp) :: Tirr, Tint, k_sw, k_lw, p_top, p_bot, T_IC, grav_const, Rd_gas, lw_a, lw_g, sw_a, sw_g, mu_z
 
   integer :: nlev, i, nb, n, u0, u3
@@ -177,7 +182,7 @@ subroutine semi_grey()
   integer :: istat, Nph
   type(dim3) :: blocks, threads
 
-  namelist /semi_grey_nml/ Nph_irr, Nph_int, Nit, last_int_fac, nlay, &
+  namelist /semi_grey_nml/ Nph_irr, Nph_int, Nit, last_int_fac, nlay, iscat, &
     & Tirr, Tint, k_sw, k_lw, p_top, p_bot, T_IC, grav_const, Rd_gas, lw_a, lw_g, sw_a, sw_g, mu_z
 
   !! Read input variables from namelist
@@ -221,8 +226,8 @@ subroutine semi_grey()
 
   allocate(alb(nb,nlay),g(nb,nlay))
   alb(1,:) = sw_a
-  alb(2,:) = lw_g
-  g(1,:) = sw_a
+  alb(2,:) = lw_a
+  g(1,:) = sw_g
   g(2,:) = lw_g
 
   ! Find the scattering and absorption opacity
@@ -275,8 +280,11 @@ subroutine semi_grey()
   !! Begin RT calculations and RE calculation
 
   ! Allocate moments and absorption arrays
-  allocate(Jdot(nlay),Hdot(nlay),Kdot(nlay),Adot(nlay))
-  allocate(Jdot_d(nlay),Hdot_d(nlay),Kdot_d(nlay),Adot_d(nlay))
+  allocate(Jdot(nlay),Hdot(nlay),Kdot(nlay))
+  allocate(Jdot_d(nlay),Hdot_d(nlay),Kdot_d(nlay))
+  allocate(Jdot_s(nlay),Hdot_s(nlay),Kdot_s(nlay))
+  allocate(Jdot_s_d(nlay),Hdot_s_d(nlay),Kdot_s_d(nlay))
+  allocate(Adot(nlay), Adot_d(nlay), Adot_s(nlay), Adot_s_d(nlay))
 
   !! Send constant grid variables to device and allocate needed device arrays
   nlay_d = nlay
@@ -285,7 +293,8 @@ subroutine semi_grey()
   Nph_irr_d = Nph_irr
   Nph_int_d = Nph_int
   mu_z_d = mu_z
-  allocate(z_d(nlev),rhokap_d(nb,nlay),alb_d(nb,nlay),rho_d(nlay),k_abs_d(nb,nlay))
+  iscat_d = iscat
+  allocate(z_d(nlev),rhokap_d(nb,nlay),alb_d(nb,nlay),rho_d(nlay),k_abs_d(nb,nlay),g_d(nb,nlay))
   
   do n = 1, Nit
 
@@ -314,17 +323,27 @@ subroutine semi_grey()
     end do
 
     ! Zero moment and absorption arrays for device
-    Jdot_d(:) = 0.0_dp ; Hdot_d(:) = 0.0_dp ; Kdot_d(:) = 0.0_dp ; Adot_d(:) = 0.0_dp
+    Jdot_d(:) = 0.0_dp ; Hdot_d(:) = 0.0_dp ; Kdot_d(:) = 0.0_dp
+    Jdot_s_d(:) = 0.0_dp; Hdot_s_d(:) = 0.0_dp;  Kdot_s_d(:) = 0.0_dp
+    Adot_d(:) = 0.0_dp ; Adot_s_d(:) = 0.0_dp
 
     !! Send non-constant grid variables to device
     z_d(:) = z(:)
     rhokap_d(:,:) = rhokap(:,:)
     alb_d(:,:) = alb(:,:)
-    rho_d(:) = rho
+    g_d(:,:) = g(:,:)
+    rho_d(:) = rho(:)
     k_abs_d(:,:) = k_abs(:,:)
     Firr_d = Firr
     Fint_d = Fint
     OLR_d = 0.0_dp
+
+
+    print*, n,'Longwave'
+
+    call pp_semi_grey_int_kernel<<<blocks, threads>>>(Nph_int_d)
+
+    !istat = cudaDeviceSynchronize()
 
     print*, n,'Shortwave'
 
@@ -332,23 +351,20 @@ subroutine semi_grey()
 
     istat = cudaDeviceSynchronize()
 
-    print*, n,'Longwave'
-
-    call pp_semi_grey_int_kernel<<<blocks, threads>>>(Nph_int_d)
-
-    istat = cudaDeviceSynchronize()
 
     ! Moment and absorption calculation
     !! Get values from device
-    Jdot(:) = Jdot_d(:) ; Hdot(:) = Hdot_d(:) ; Kdot(:) = Kdot_d(:) ; Adot(:) = Adot_d(:)
+    Jdot(:) = Jdot_d(:) ; Hdot(:) = Hdot_d(:) ; Kdot(:) = Kdot_d(:)
+    Jdot_s(:) = Jdot_s_d(:) ; Hdot_s(:) = Hdot_s_d(:) ; Kdot_s(:) = Kdot_s_d(:)
     !! Calculate Moments
-    Jdot(:) = Jdot(:)/dze(:)/fourpi
-    Hdot(:) = Hdot(:)/dze(:)/fourpi
-    Kdot(:) = Kdot(:)/dze(:)/fourpi
-    Adot(:) = Adot(:)/dze(:)
+    Jdot(:) = Jdot(:)/dze(:)/fourpi ; Hdot(:) = Hdot(:)/dze(:)/fourpi ; Kdot(:) = Kdot(:)/dze(:)/fourpi
+    Jdot_s(:) = Jdot_s(:)/dze(:)/fourpi ; Hdot_s(:) = Hdot_s(:)/dze(:)/fourpi ; Kdot_s(:) = Kdot_s(:)/dze(:)/fourpi
+
+    Adot(:) = Adot_d(:) ;  Adot_s(:) = Adot_s_d(:)
+    Adot(:) = Adot(:)/dze(:) ; Adot_s(:) = Adot_s(:)/dze(:)
 
     !! Do temperature adjustment with safety factor
-    dTl(:) = (((Adot(:))/(4.0_dp * sb_c * rho(:)*k_P(:)))**(1.0_dp/4.0_dp) - Tl(:)) * 0.8_dp
+    dTl(:) = (((Adot(:) + Adot_s(:))/(4.0_dp * sb_c * rho(:)*k_P(:)))**(1.0_dp/4.0_dp) - Tl(:)) * 0.8_dp
     Tl(:) = Tl(:) + dTl(:)
 
     write(u0,*) n
@@ -365,7 +381,7 @@ subroutine semi_grey()
   open(newunit=u3,file='results/estim_pp_semi_grey_1D_pp.txt',action='readwrite')
   do i = 1, nlay
     write(u3,*) i, (tau_R(i)+tau_R(i+1))/2.0_dp, &
-    &  Jdot(i), Hdot(i), Kdot(i), Adot(i)
+    &  Jdot(i), Hdot(i), Kdot(i), Adot(i), Jdot_s(i), Hdot_s(i), Kdot_s(i), Adot_s(i)
   end do
 
   close(u0)

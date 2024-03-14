@@ -15,7 +15,7 @@ module mc_data_mod
     real(dp) :: w
     real(dp) :: tau, tau_p
     real(dp) :: e0dt
-    integer :: zc, iscat, b
+    integer :: zc, iscat, b, inc
     integer :: flag
 
     integer :: nscat
@@ -29,16 +29,18 @@ module mc_data_mod
   real(dp), parameter :: sb_c = 5.670374419e-5_dp
 
   !! Host moments and absorption
-  real(dp), allocatable, dimension(:) :: Jdot, Hdot, Kdot, Adot
+  real(dp), allocatable, dimension(:) :: Jdot, Hdot, Kdot, Jdot_s, Hdot_s, Kdot_s
+  real(dp), allocatable, dimension(:) ::  Adot, Adot_s
 
   !! Device moments and absorption
-  real(dp), allocatable, dimension(:), device :: Jdot_d, Hdot_d, Kdot_d, Adot_d
+  real(dp), allocatable, dimension(:), device :: Jdot_d, Hdot_d, Kdot_d, Jdot_s_d, Hdot_s_d, Kdot_s_d
+  real(dp), allocatable, dimension(:), device :: Adot_d, Adot_s_d
 
   !! Device grid variables
-  integer, device :: nlay_d, nlev_d, nb_d
+  integer, device :: nlay_d, nlev_d, nb_d, iscat_d
   real(dp), device :: mu_z_d
   real(dp), allocatable, dimension(:), device :: z_d, rho_d
-  real(dp), allocatable, dimension(:,:), device :: rhokap_d, alb_d, k_abs_d 
+  real(dp), allocatable, dimension(:,:), device :: rhokap_d, alb_d, g_d, k_abs_d 
 
   !! OLR measurements
   real(dp) :: OLR
