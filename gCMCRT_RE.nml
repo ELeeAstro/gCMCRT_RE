@@ -1,0 +1,58 @@
+&main_nml
+
+exper = 'semi_grey'
+
+/
+
+&grey_nml
+
+Nph = 1000000
+Nit = 10
+last_int_fac = 5 
+
+Tint = 1000.0
+T_IC = 1000.0
+k_lw = 1.0e-2
+
+nlay = 100
+
+p_top = 1e-6
+p_bot = 1.0
+grav_const = 1000.0
+Rd_gas = 3.5568e7 
+
+lw_a = 0.0
+lw_g = 0.0
+
+/
+
+
+&semi_grey_nml
+
+Nph_irr = 10000000
+Nph_int = 100
+Nit = 10
+last_int_fac = 5
+
+Tirr = 1000.0
+Tint = 100.0
+
+mu_z = 0.577
+
+k_sw = 4.0e-3
+k_lw = 1.0e-2
+
+nlay = 100
+
+p_top = 1e-6
+p_bot = 1.0
+grav_const = 1000.0
+Rd_gas = 3.5568e7
+
+lw_a = 0.0
+lw_g = 0.0
+
+sw_a = 0.0
+sw_g = 0.0
+
+/
